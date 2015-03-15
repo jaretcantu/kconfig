@@ -1,3 +1,8 @@
+# Set up make environment like a kernel build.
+obj := .
+src := .
+srctree := .
+
 # ===========================================================================
 # Kernel configuration targets
 # These targets are used from top-level makefile
@@ -310,3 +315,12 @@ $(obj)/%.moc: $(src)/%.h $(obj)/.tmp_qtcheck
 $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
+
+# Set up clean rules
+.PHONY: clean distclean
+clean:
+	$(Q)rm -f $(clean-files)
+distclean: clean
+	$(Q)rm -f $(lxdialog) $(conf-objs) $(mconf-objs) $(kxgettext-objs) \
+		$(hostprogs-y) $(qconf-cxxobjs) $(qconf-objs) $(gconf-objs) \
+		gconf qconf mconf .depend
