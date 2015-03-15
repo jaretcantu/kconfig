@@ -130,6 +130,51 @@ void expr_free(struct expr *e)
 	free(e);
 }
 
+/* Compares two period (or underscore, hyphens, etc) separated versions */
+static int __expr_version_compare(char *ver1, char *ver2, char*ptr1, char*ptr2)
+{
+	static const char DELIM[] = "._-";
+	int val1, val2;
+
+	/* Get the next (sub)version from each string */
+	ver1 = strtok_r(ver1, DELIM, &ptr1);
+	ver2 = strtok_r(ver2, DELIM, &ptr2);
+
+	if (!ver1) {
+		if (!ver2) /* both strings are empty */
+			return 0;
+		return -1; /* ver2 had more subversions */
+	}
+	if (!ver2)
+		return  1; /* ver1 had more subversions */
+
+	/* Both strings are non-empty; perform a numeric comparison */
+	val1 = atoi(ver1);
+	val2 = atoi(ver2);
+
+	if (val1 < val2)
+		return -1;
+	if (val1 > val2)
+		return  1;
+
+	/* Equal; compare the next subversion */
+	return __expr_version_compare(0,0, ptr1, ptr2);
+}
+
+static int expr_version_compare(struct symbol* sym1, struct symbol* sym2)
+{
+	char *str1, *str2;
+	int cmp;
+	sym_calc_value(sym1);
+	sym_calc_value(sym2);
+	str1 = strdup(sym_get_string_value(sym1));
+	str2 = strdup(sym_get_string_value(sym2));
+	cmp = __expr_version_compare(str1, str2, 0, 0);
+	free(str1);
+	free(str2);
+	return cmp;
+}
+
 static int trans_count;
 
 #define e1 (*ep1)
@@ -362,9 +407,9 @@ static struct expr *expr_join_or(struct expr *e1, struct expr *e2)
 
 	if (expr_eq(e1, e2))
 		return expr_copy(e1);
-	if (e1->type != E_EQUAL && e1->type != E_UNEQUAL && e1->type != E_SYMBOL && e1->type != E_NOT)
+	if (e1->type != E_EQUAL && e1->type != E_UNEQUAL && e1->type != E_SYMBOL && e1->type != E_NOT && e1->type != E_LESS_THAN && e1->type != E_LESS_EQUAL && e1->type != E_GREATER_THAN && e1->type != E_GREATER_EQUAL)
 		return NULL;
-	if (e2->type != E_EQUAL && e2->type != E_UNEQUAL && e2->type != E_SYMBOL && e2->type != E_NOT)
+	if (e2->type != E_EQUAL && e2->type != E_UNEQUAL && e2->type != E_SYMBOL && e2->type != E_NOT && e2->type != E_LESS_THAN && e2->type != E_LESS_EQUAL && e2->type != E_GREATER_THAN && e2->type != E_GREATER_EQUAL)
 		return NULL;
 	if (e1->type == E_NOT) {
 		tmp = e1->left.expr;
@@ -381,6 +426,96 @@ static struct expr *expr_join_or(struct expr *e1, struct expr *e2)
 		sym2 = e2->left.sym;
 	if (sym1 != sym2)
 		return NULL;
+
+	if ((e1->type == E_LESS_THAN || e1->type == E_LESS_EQUAL || e1->type == E_GREATER_THAN || e1->type == E_GREATER_EQUAL)
+	 && (e2->type == E_LESS_THAN || e2->type == E_LESS_EQUAL || e2->type == E_GREATER_THAN || e2->type == E_GREATER_EQUAL)) {
+		int cmp;
+		int type1, type2;
+		struct symbol *ver1, *ver2;
+
+		/* Get relationship of the compared versions to determine how
+		 * to collapse or remove the version comparison. */
+		cmp = expr_version_compare(e1->right.sym, e2->right.sym);
+
+		/* For simplicity, always make *1 the greater version */
+		if (cmp == -1) {
+			/* swap 1 and 2 so 1 is greater */
+			type1 = e2->type;
+			type2 = e1->type;
+			ver1 = e2->right.sym;
+			ver2 = e1->right.sym;
+		} else {
+			type1 = e1->type;
+			type2 = e2->type;
+			ver1 = e1->right.sym;
+			ver2 = e2->right.sym;
+		}
+
+		switch (type1) {
+		case E_GREATER_THAN:
+			switch (type2) {
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* Keep only the lesser version */
+				return expr_alloc_comp(type2, sym1, ver2);
+			case E_LESS_EQUAL:
+				/* (a > ver || a <= ver) -> (y) */
+				if (cmp == 0)
+					return expr_alloc_symbol(&symbol_yes);
+				break;
+			case E_LESS_THAN:
+				/* (a > ver || a < ver) -> (a != ver) */
+				if (cmp == 0)
+					return expr_alloc_comp(E_UNEQUAL,
+								sym1, ver1);
+				break;
+			}
+			break;
+		case E_GREATER_EQUAL:
+			switch (type2) {
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* Keep only the lesser version */
+				return expr_alloc_comp(type1, sym1, ver2);
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* (a >= ver || a < ver) -> (y) */
+				if (cmp == 0)
+					return expr_alloc_symbol(&symbol_yes);
+			}
+			break;
+		case E_LESS_THAN:
+			switch (type2) {
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* Keep only the greater version */
+				return expr_alloc_comp(type2, sym1, ver1);
+			case E_GREATER_THAN:
+				/* (a < ver || a > ver) -> (a != ver) */
+				if (cmp == 0)
+					return expr_alloc_comp(E_UNEQUAL,
+								sym1, ver1);
+			case E_GREATER_EQUAL:
+				/* Matches all values */
+				return expr_alloc_symbol(&symbol_yes);
+			}
+			break;
+		case E_LESS_EQUAL:
+			switch (type2) {
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* Keep only the greater version */
+				return expr_alloc_comp(type1, sym1, ver1);
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* Matches all values */
+				return expr_alloc_symbol(&symbol_yes);
+			}
+			break;
+		}
+		return NULL;
+	}
+
 	if (sym1->type != S_BOOLEAN && sym1->type != S_TRISTATE)
 		return NULL;
 	if (sym1->type == S_TRISTATE) {
@@ -402,7 +537,6 @@ static struct expr *expr_join_or(struct expr *e1, struct expr *e2)
 			// (a='m') || (a='n') -> (a!='y')
 			return expr_alloc_comp(E_UNEQUAL, sym1, &symbol_yes);
 		}
-		/* Technically, some range math could be done in here for >/< */
 	}
 	if (sym1->type == S_BOOLEAN && sym1 == sym2) {
 		if ((e1->type == E_NOT && e1->left.expr->type == E_SYMBOL && e2->type == E_SYMBOL) ||
@@ -427,9 +561,9 @@ static struct expr *expr_join_and(struct expr *e1, struct expr *e2)
 
 	if (expr_eq(e1, e2))
 		return expr_copy(e1);
-	if (e1->type != E_EQUAL && e1->type != E_UNEQUAL && e1->type != E_SYMBOL && e1->type != E_NOT)
+	if (e1->type != E_EQUAL && e1->type != E_UNEQUAL && e1->type != E_SYMBOL && e1->type != E_NOT && e1->type != E_LESS_THAN && e1->type != E_LESS_EQUAL && e1->type != E_GREATER_THAN && e1->type != E_GREATER_EQUAL)
 		return NULL;
-	if (e2->type != E_EQUAL && e2->type != E_UNEQUAL && e2->type != E_SYMBOL && e2->type != E_NOT)
+	if (e2->type != E_EQUAL && e2->type != E_UNEQUAL && e2->type != E_SYMBOL && e2->type != E_NOT && e2->type != E_LESS_THAN && e2->type != E_LESS_EQUAL && e2->type != E_GREATER_THAN && e2->type != E_GREATER_EQUAL)
 		return NULL;
 	if (e1->type == E_NOT) {
 		tmp = e1->left.expr;
@@ -446,6 +580,97 @@ static struct expr *expr_join_and(struct expr *e1, struct expr *e2)
 		sym2 = e2->left.sym;
 	if (sym1 != sym2)
 		return NULL;
+
+	if ((e1->type == E_LESS_THAN || e1->type == E_LESS_EQUAL || e1->type == E_GREATER_THAN || e1->type == E_GREATER_EQUAL)
+	 && (e2->type == E_LESS_THAN || e2->type == E_LESS_EQUAL || e2->type == E_GREATER_THAN || e2->type == E_GREATER_EQUAL)) {
+		int cmp;
+		int type1, type2;
+		struct symbol *ver1, *ver2;
+
+		/* Get relationship of the compared versions to determine how
+		 * to collapse or remove the version comparison. */
+		cmp = expr_version_compare(e1->right.sym, e2->right.sym);
+
+		/* For simplicity, always make *1 the greater version */
+		if (cmp == -1) {
+			/* swap 1 and 2 so 1 is greater */
+			type1 = e2->type;
+			type2 = e1->type;
+			ver1 = e2->right.sym;
+			ver2 = e1->right.sym;
+		} else {
+			type1 = e1->type;
+			type2 = e2->type;
+			ver1 = e1->right.sym;
+			ver2 = e2->right.sym;
+		}
+
+		switch (type1) {
+		case E_GREATER_THAN:
+			switch (type2) {
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* Keep only the greater version */
+				return expr_alloc_comp(type1, sym1, ver1);
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* Impossible comparison */
+				return expr_alloc_symbol(&symbol_no);
+			}
+			break;
+		case E_GREATER_EQUAL:
+			switch (type2) {
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* Keep only the greater version */
+				return expr_alloc_comp(type2, sym1, ver1);
+			case E_LESS_EQUAL:
+				/* (a <= ver && a >= ver) -> (a == ver) */
+				if (cmp == 0)
+					return expr_alloc_comp(E_EQUAL,
+								sym1, ver1);
+			case E_LESS_THAN:
+				/* Impossible comparison */
+				return expr_alloc_symbol(&symbol_no);
+			}
+			break;
+		case E_LESS_THAN:
+			switch (type2) {
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* Keep only the lesser version */
+				return expr_alloc_comp(type1, sym1, ver2);
+			case E_GREATER_EQUAL:
+			case E_GREATER_THAN:
+				/* (a < ver && a > ver) -> (n) */
+				if (cmp == 0)
+					return expr_alloc_symbol(&symbol_no);
+				break;
+			}
+			break;
+		case E_LESS_EQUAL:
+			switch (type2) {
+			case E_LESS_EQUAL:
+			case E_LESS_THAN:
+				/* Keep only the lesser version */
+				return expr_alloc_comp(type2, sym1, ver2);
+			case E_GREATER_EQUAL:
+				/* (a <= ver && a >= ver) -> (a == ver) */
+				if (cmp == 0)
+					return expr_alloc_comp(E_EQUAL,
+								sym1, ver1);
+				break;
+			case E_GREATER_THAN:
+				/* (a <= ver && a > ver) -> (n) */
+				if (cmp == 0)
+					return expr_alloc_symbol(&symbol_no);
+				break;
+			}
+			break;
+		}
+		return NULL;
+	}
+
 	if (sym1->type != S_BOOLEAN && sym1->type != S_TRISTATE)
 		return NULL;
 
@@ -502,7 +727,6 @@ static struct expr *expr_join_and(struct expr *e1, struct expr *e2)
 		    (e1->type == E_SYMBOL && e2->type == E_UNEQUAL && e2->right.sym == &symbol_yes) ||
 		    (e2->type == E_SYMBOL && e1->type == E_UNEQUAL && e1->right.sym == &symbol_yes))
 			return NULL;
-		/* Technically, some range match could eliminate some >/< */
 	}
 
 	if (DEBUG_EXPR) {
@@ -993,41 +1217,11 @@ struct expr *expr_trans_compare(struct expr *e, enum expr_type type, struct symb
 	return NULL;
 }
 
-/* Compares two period (or underscore, hyphens, etc) separated versions */
-static int expr_version_compare(char *ver1, char *ver2, char*ptr1, char*ptr2)
-{
-	static const char DELIM[] = "._-";
-	int val1, val2;
-
-	/* Get the next (sub)version from each string */
-	ver1 = strtok_r(ver1, DELIM, &ptr1);
-	ver2 = strtok_r(ver2, DELIM, &ptr2);
-
-	if (!ver1) {
-		if (!ver2) /* both strings are empty */
-			return 0;
-		return -1; /* ver2 had more subversions */
-	}
-	if (!ver2)
-		return  1; /* ver1 had more subversions */
-
-	/* Both strings are non-empty; perform a numeric comparison */
-	val1 = atoi(ver1);
-	val2 = atoi(ver2);
-
-	if (val1 < val2)
-		return -1;
-	if (val1 > val2)
-		return  1;
-
-	/* Equal; compare the next subversion */
-	return expr_version_compare(0,0, ptr1, ptr2);
-}
-
 tristate expr_calc_value(struct expr *e)
 {
 	tristate val1, val2;
 	const char *str1, *str2;
+	int cmp;
 
 	if (!e)
 		return yes;
@@ -1062,22 +1256,13 @@ tristate expr_calc_value(struct expr *e)
 	case E_LESS_THAN:
 	case E_LESS_EQUAL:
 	case E_GREATER_THAN:
-	case E_GREATER_EQUAL: {
-		char *str1, *str2; /* need non-const versions */
-		int cmp;
-		sym_calc_value(e->left.sym);
-		sym_calc_value(e->right.sym);
-		str1 = strdup(sym_get_string_value(e->left.sym));
-		str2 = strdup(sym_get_string_value(e->right.sym));
-		cmp = expr_version_compare(str1, str2, 0, 0);
-		free(str1);
-		free(str2);
+	case E_GREATER_EQUAL:
+		cmp = expr_version_compare(e->left.sym, e->right.sym);
 		switch (e->type) {
 		case E_LESS_THAN:	return cmp <  0 ? yes : no;
 		case E_LESS_EQUAL:	return cmp <= 0 ? yes : no;
 		case E_GREATER_THAN:	return cmp >  0 ? yes : no;
 		case E_GREATER_EQUAL:	return cmp >= 0 ? yes : no;
-		}
 		}
 	default:
 		printf("expr_calc_value: %d?\n", e->type);
