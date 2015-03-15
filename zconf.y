@@ -69,6 +69,10 @@ static struct menu *current_menu, *current_entry;
 %token <string> T_WORD
 %token <string> T_WORD_QUOTE
 %token T_UNEQUAL
+%token T_LESS_THAN
+%token T_LESS_EQUAL
+%token T_GREATER_THAN
+%token T_GREATER_EQUAL
 %token T_CLOSE_PAREN
 %token T_OPEN_PAREN
 %token T_EOL
@@ -76,6 +80,8 @@ static struct menu *current_menu, *current_entry;
 %left T_OR
 %left T_AND
 %left T_EQUAL T_UNEQUAL
+%left T_LESS_THAN T_LESS_EQUAL
+%left T_GREATER_THAN T_GREATER_EQUAL
 %nonassoc T_NOT
 
 %type <string> prompt
@@ -469,6 +475,10 @@ if_expr:  /* empty */			{ $$ = NULL; }
 expr:	  symbol				{ $$ = expr_alloc_symbol($1); }
 	| symbol T_EQUAL symbol			{ $$ = expr_alloc_comp(E_EQUAL, $1, $3); }
 	| symbol T_UNEQUAL symbol		{ $$ = expr_alloc_comp(E_UNEQUAL, $1, $3); }
+	| symbol T_LESS_THAN symbol		{ $$ = expr_alloc_comp(E_LESS_THAN, $1, $3); }
+	| symbol T_LESS_EQUAL symbol		{ $$ = expr_alloc_comp(E_LESS_EQUAL, $1, $3); }
+	| symbol T_GREATER_THAN symbol		{ $$ = expr_alloc_comp(E_GREATER_THAN, $1, $3); }
+	| symbol T_GREATER_EQUAL symbol		{ $$ = expr_alloc_comp(E_GREATER_EQUAL, $1, $3); }
 	| T_OPEN_PAREN expr T_CLOSE_PAREN	{ $$ = $2; }
 	| T_NOT expr				{ $$ = expr_alloc_one(E_NOT, $2); }
 	| expr T_OR expr			{ $$ = expr_alloc_two(E_OR, $1, $3); }

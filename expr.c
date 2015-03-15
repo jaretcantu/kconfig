@@ -77,6 +77,10 @@ struct expr *expr_copy(const struct expr *org)
 		break;
 	case E_EQUAL:
 	case E_UNEQUAL:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		e->left.sym = org->left.sym;
 		e->right.sym = org->right.sym;
 		break;
@@ -109,6 +113,10 @@ void expr_free(struct expr *e)
 		return;
 	case E_EQUAL:
 	case E_UNEQUAL:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		break;
 	case E_OR:
 	case E_AND:
@@ -195,6 +203,10 @@ int expr_eq(struct expr *e1, struct expr *e2)
 	switch (e1->type) {
 	case E_EQUAL:
 	case E_UNEQUAL:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		return e1->left.sym == e2->left.sym && e1->right.sym == e2->right.sym;
 	case E_SYMBOL:
 		return e1->left.sym == e2->left.sym;
@@ -390,6 +402,7 @@ static struct expr *expr_join_or(struct expr *e1, struct expr *e2)
 			// (a='m') || (a='n') -> (a!='y')
 			return expr_alloc_comp(E_UNEQUAL, sym1, &symbol_yes);
 		}
+		/* Technically, some range math could be done in here for >/< */
 	}
 	if (sym1->type == S_BOOLEAN && sym1 == sym2) {
 		if ((e1->type == E_NOT && e1->left.expr->type == E_SYMBOL && e2->type == E_SYMBOL) ||
@@ -489,6 +502,7 @@ static struct expr *expr_join_and(struct expr *e1, struct expr *e2)
 		    (e1->type == E_SYMBOL && e2->type == E_UNEQUAL && e2->right.sym == &symbol_yes) ||
 		    (e2->type == E_SYMBOL && e1->type == E_UNEQUAL && e1->right.sym == &symbol_yes))
 			return NULL;
+		/* Technically, some range match could eliminate some >/< */
 	}
 
 	if (DEBUG_EXPR) {
@@ -644,6 +658,10 @@ struct expr *expr_transform(struct expr *e)
 	case E_UNEQUAL:
 	case E_SYMBOL:
 	case E_LIST:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		break;
 	default:
 		e->left.expr = expr_transform(e->left.expr);
@@ -712,6 +730,28 @@ struct expr *expr_transform(struct expr *e)
 			free(e);
 			e = tmp;
 			e->type = e->type == E_EQUAL ? E_UNEQUAL : E_EQUAL;
+			break;
+		case E_LESS_THAN:
+		case E_LESS_EQUAL:
+		case E_GREATER_THAN:
+		case E_GREATER_EQUAL:
+			tmp = e->left.expr;
+			free(e);
+			e = tmp;
+			switch (e->type) {
+			case E_LESS_THAN: // !a<b -> a>=b
+				e->type = E_GREATER_EQUAL;
+				break;
+			case E_LESS_EQUAL: // !a<=b -> a>b
+				e->type = E_GREATER_THAN;
+				break;
+			case E_GREATER_THAN: // !a>b -> a<=b
+				e->type = E_LESS_EQUAL;
+				break;
+			case E_GREATER_EQUAL: // !a>=b -> a<b
+				e->type = E_LESS_THAN;
+				break;
+			}
 			break;
 		case E_OR:
 			// !(a || b) -> !a && !b
@@ -784,6 +824,10 @@ int expr_contains_symbol(struct expr *dep, struct symbol *sym)
 		return dep->left.sym == sym;
 	case E_EQUAL:
 	case E_UNEQUAL:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		return dep->left.sym == sym ||
 		       dep->right.sym == sym;
 	case E_NOT:
@@ -804,6 +848,10 @@ bool expr_depends_symbol(struct expr *dep, struct symbol *sym)
 		return expr_depends_symbol(dep->left.expr, sym) ||
 		       expr_depends_symbol(dep->right.expr, sym);
 	case E_SYMBOL:
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
 		return dep->left.sym == sym;
 	case E_EQUAL:
 		if (dep->left.sym == sym) {
@@ -925,6 +973,16 @@ struct expr *expr_trans_compare(struct expr *e, enum expr_type type, struct symb
 				return expr_copy(e);
 		}
 		break;
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
+		e = expr_copy(e);
+		if ((sym == &symbol_no) != (type == E_UNEQUAL)) {
+			/* Single negative */
+			e = expr_alloc_one(E_NOT, e);
+		}
+		return e;
 	case E_SYMBOL:
 		return expr_alloc_comp(type, e->left.sym, sym);
 	case E_LIST:
@@ -933,6 +991,37 @@ struct expr *expr_trans_compare(struct expr *e, enum expr_type type, struct symb
 		/* panic */;
 	}
 	return NULL;
+}
+
+/* Compares two period (or underscore, hyphens, etc) separated versions */
+static int expr_version_compare(char *ver1, char *ver2, char*ptr1, char*ptr2)
+{
+	static const char DELIM[] = "._-";
+	int val1, val2;
+
+	/* Get the next (sub)version from each string */
+	ver1 = strtok_r(ver1, DELIM, &ptr1);
+	ver2 = strtok_r(ver2, DELIM, &ptr2);
+
+	if (!ver1) {
+		if (!ver2) /* both strings are empty */
+			return 0;
+		return -1; /* ver2 had more subversions */
+	}
+	if (!ver2)
+		return  1; /* ver1 had more subversions */
+
+	/* Both strings are non-empty; perform a numeric comparison */
+	val1 = atoi(ver1);
+	val2 = atoi(ver2);
+
+	if (val1 < val2)
+		return -1;
+	if (val1 > val2)
+		return  1;
+
+	/* Equal; compare the next subversion */
+	return expr_version_compare(0,0, ptr1, ptr2);
 }
 
 tristate expr_calc_value(struct expr *e)
@@ -970,6 +1059,26 @@ tristate expr_calc_value(struct expr *e)
 		str1 = sym_get_string_value(e->left.sym);
 		str2 = sym_get_string_value(e->right.sym);
 		return !strcmp(str1, str2) ? no : yes;
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL: {
+		char *str1, *str2; /* need non-const versions */
+		int cmp;
+		sym_calc_value(e->left.sym);
+		sym_calc_value(e->right.sym);
+		str1 = strdup(sym_get_string_value(e->left.sym));
+		str2 = strdup(sym_get_string_value(e->right.sym));
+		cmp = expr_version_compare(str1, str2, 0, 0);
+		free(str1);
+		free(str2);
+		switch (e->type) {
+		case E_LESS_THAN:	return cmp <  0 ? yes : no;
+		case E_LESS_EQUAL:	return cmp <= 0 ? yes : no;
+		case E_GREATER_THAN:	return cmp >  0 ? yes : no;
+		case E_GREATER_EQUAL:	return cmp >= 0 ? yes : no;
+		}
+		}
 	default:
 		printf("expr_calc_value: %d?\n", e->type);
 		return no;
@@ -984,6 +1093,12 @@ int expr_compare_type(enum expr_type t1, enum expr_type t2)
 	if (t1 == t2)
 		return 0;
 	switch (t1) {
+	case E_LESS_THAN:
+	case E_LESS_EQUAL:
+	case E_GREATER_THAN:
+	case E_GREATER_EQUAL:
+		if (t2 == E_EQUAL || t2 == E_UNEQUAL)
+			return 1;
 	case E_EQUAL:
 	case E_UNEQUAL:
 		if (t2 == E_NOT)
@@ -1084,6 +1199,38 @@ void expr_print(struct expr *e, void (*fn)(void *, struct symbol *, const char *
 		else
 			fn(data, NULL, "<choice>");
 		fn(data, NULL, "!=");
+		fn(data, e->right.sym, e->right.sym->name);
+		break;
+	case E_LESS_THAN:
+		if (e->left.sym->name)
+			fn(data, e->left.sym, e->left.sym->name);
+		else
+			fn(data, NULL, "<choice>");
+		fn(data, NULL, " < ");
+		fn(data, e->right.sym, e->right.sym->name);
+		break;
+	case E_LESS_EQUAL:
+		if (e->left.sym->name)
+			fn(data, e->left.sym, e->left.sym->name);
+		else
+			fn(data, NULL, "<choice>");
+		fn(data, NULL, " <= ");
+		fn(data, e->right.sym, e->right.sym->name);
+		break;
+	case E_GREATER_THAN:
+		if (e->left.sym->name)
+			fn(data, e->left.sym, e->left.sym->name);
+		else
+			fn(data, NULL, "<choice>");
+		fn(data, NULL, " > ");
+		fn(data, e->right.sym, e->right.sym->name);
+		break;
+	case E_GREATER_EQUAL:
+		if (e->left.sym->name)
+			fn(data, e->left.sym, e->left.sym->name);
+		else
+			fn(data, NULL, "<choice>");
+		fn(data, NULL, " >= ");
 		fn(data, e->right.sym, e->right.sym->name);
 		break;
 	case E_OR:
