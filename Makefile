@@ -316,6 +316,12 @@ $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
 
+.PHONY: reship
+reship:
+	gperf -t --output-file zconf.hash.c_shipped -a -C -E -g -k '1,3,$$' -p -t zconf.gperf
+	flex --yylineno -Pzconf -o zconf.lex.c_shipped zconf.l
+	bison -l -b zconf -o zconf.tab.c_shipped zconf.y
+
 # Set up clean rules
 .PHONY: clean distclean
 clean:
