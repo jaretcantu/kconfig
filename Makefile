@@ -318,6 +318,21 @@ $(obj)/gconf.glade.h: $(obj)/gconf.glade
 	$(Q)intltool-extract --type=gettext/glade --srcdir=$(srctree) \
 	$(obj)/gconf.glade
 
+__hostprogs := $(sort $(hostprogs-y) $(hostprogs-m))
+host-csingle := $(foreach m,$(__hostprogs),$(if $($(m)-objs),,$(m)))
+host-cmulti := $(foreach m,$(__hostprogs),\
+           $(if $($(m)-cxxobjs),,$(if $($(m)-objs),$(m))))
+host-cobjs := $(sort $(foreach m,$(__hostprogs),$($(m)-objs)))
+$(host-csingle): %: %.c
+	$(HOSTCC) $(HOST_EXTRACFLAGS) $(HOSTCFLAGS) $(HOSTCFLAGS_$@) $< $(HOST_LOADLIBES) -o $@
+$(host-cmulti): %: $(host-cobjs) $(host-cshlib)
+	$(HOSTCC) $(HOST_EXTRACFLAGS) $(HOSTCFLAGS) $(HOSTCFLAGS_$@) $($@-objs) $(HOST_LOADLIBES) -o $@
+$(host-cobjs): %.o: %.c
+	$(HOSTCC) $(HOST_EXTRACFLAGS) $(HOSTCFLAGS) $(HOSTCFLAGS_$@) -c $< -o $@
+
+$(obj)/%:: $(src)/%_shipped
+	$(Q)cat $< > $@
+
 .PHONY: reship
 reship:
 	gperf -t --output-file zconf.hash.c_shipped -a -C -E -g -k '1,3,$$' -p -t zconf.gperf
