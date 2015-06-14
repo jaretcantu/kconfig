@@ -3,6 +3,8 @@ obj := .
 src := .
 srctree := .
 
+HOSTCC ?= gcc
+
 # ===========================================================================
 # Kernel configuration targets
 # These targets are used from top-level makefile
