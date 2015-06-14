@@ -22,22 +22,22 @@ endif
 unexport CONFIG_
 
 xconfig: $(obj)/qconf
-	$< $(Kconfig)
+	$(obj)/qconf $(Kconfig)
 
 gconfig: $(obj)/gconf
-	$< $(Kconfig)
+	$(obj)/gconf $(Kconfig)
 
 menuconfig: $(obj)/mconf
-	$< $(Kconfig)
+	$(obj)/mconf $(Kconfig)
 
 config: $(obj)/conf
-	$< --oldaskconfig $(Kconfig)
+	$(obj)/conf --oldaskconfig $(Kconfig)
 
 nconfig: $(obj)/nconf
-	$< $(Kconfig)
+	$(obj)/nconf $(Kconfig)
 
 oldconfig: $(obj)/conf
-	$< --$@ $(Kconfig)
+	$(obj)/conf --$@ $(Kconfig)
 
 silentoldconfig: $(obj)/conf
 	$(Q)mkdir -p include/config include/generated
