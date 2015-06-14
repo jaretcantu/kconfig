@@ -322,7 +322,7 @@ $(obj)/gconf.glade.h: $(obj)/gconf.glade
 reship:
 	gperf -t --output-file zconf.hash.c_shipped -a -C -E -g -k '1,3,$$' -p -t zconf.gperf
 	flex --yylineno -Pzconf -o zconf.lex.c_shipped zconf.l
-	bison -l -b zconf -o zconf.tab.c_shipped zconf.y
+	bison -l -t -p zconf -o zconf.tab.c_shipped zconf.y
 
 # Set up clean rules
 .PHONY: clean distclean
