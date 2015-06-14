@@ -277,9 +277,9 @@ $(obj)/.tmp_qtcheck:
 	echo "KC_QT_MOC=$$moc" >> $@
 endif
 
+ifeq ($(MAKECMDGOALS),gconfig)
 $(obj)/gconf.o: $(obj)/.tmp_gtkcheck
 
-ifeq ($(MAKECMDGOALS),gconfig)
 -include $(obj)/.tmp_gtkcheck
 
 # GTK needs some extra effort, too...
