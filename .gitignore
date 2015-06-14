@@ -20,3 +20,7 @@ nconf
 qconf
 gconf
 kxgettext
+
+*.o
+test/Kconfig
+.config*
