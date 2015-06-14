@@ -1,0 +1,14 @@
+#!/bin/sh
+
+conf=$1
+
+grep -oE -e '^CONFIG_N_[^=]+' -e '# CONFIG_Y_[^ ]+' $conf
+ret=$?
+
+if [ $ret = 0 ]; then
+	echo '*** FAILED TESTS ***'
+	exit 1
+fi
+
+echo All tests succeeded
+exit 0
