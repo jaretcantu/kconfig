@@ -1,17 +1,16 @@
-KCONFIG ARITHMETIC COMPARISON
+KCONFIG VERSION COMPARISON
 
 
 This is a derivation of Kconfig (scripts/config in the Linux kernel source tree)
-which provides arithmetic comparison functionality (greater/less than/or equal
-to).  It is based on Kconfig from v3.18.
-
-The new operators include: < > <= >=
+which provides version comparison functionality (greater/less than/or equal
+to).  It is based on Kconfig from v5.10.
 
 
 This functionality is designed for use with versions that have major and minor
-numbers (or more). The functionality presented herein will work for integer
-comparisons, but it will not work (the way you would expect, at least) with
-floating-point numbers.
+numbers (or more), as opposed to theh vanilla kernel which only allows the
+comparison of integers. The functionality presented herein will also work for
+integer comparisons, but it will not work (the way you would expect, at least)
+with floating-point numbers.
 
 Each revision level of a version is taken as a separate integer comparison. The
 comparisons continue until one of the levels is unequal or until there are no
@@ -27,10 +26,3 @@ Versions may be separated with a number of different symbols: . - _
 Only the changes from the C source files need to be included for this
 functionality to be included in another project.  The rest is simply for testing
 and building as part of an isolated tree.
-
-
-These are the commands needed to regenerate the genereated shipped files:
-
-gperf -t --output-file zconf.hash.c_shipped -a -C -E -g -k '1,3,$' -p -t zconf.gperf
-flex --yylineno -Pzconf -o zconf.lex.c_shipped zconf.l
-bison -l -t -p zconf -o zconf.tab.c_shipped zconf.y
