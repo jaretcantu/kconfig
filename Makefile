@@ -2,6 +2,8 @@
 
 # The following bits are from scripts/Kbuild.include
 
+CONFIG_SHELL:=sh
+
 # Convenient variables
 comma   := ,
 quote   := "
@@ -47,6 +49,7 @@ src := .
 srctree := .
 
 HOSTCC ?= gcc
+HOSTCXX ?= g++
 
 # ===========================================================================
 # Kernel configuration targets
