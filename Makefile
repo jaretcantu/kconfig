@@ -260,7 +260,7 @@ HOSTCFLAGS_gconf.o  = $(shell . $(obj)/gconf-cfg && echo $$cflags)
 $(obj)/gconf.o: $(obj)/gconf-cfg
 
 # check if necessary packages are available, and configure build flags
-$(obj)/%conf-cfg: $(src)/%conf-cfg.sh FORCE
+$(obj)/%conf-cfg: $(src)/%conf-cfg.sh
 	$(CONFIG_SHELL) $< > $@
 
 clean-files += *conf-cfg
@@ -270,7 +270,7 @@ clean-files += *conf-cfg
 quiet_cmd_flex = LEX     $@
       cmd_flex = $(LEX) -o$@ -L $<
 
-$(obj)/%.lex.c: $(src)/%.l FORCE
+$(obj)/%.lex.c: $(src)/%.l
 	$(cmd_flex)
 
 # YACC
@@ -278,7 +278,7 @@ $(obj)/%.lex.c: $(src)/%.l FORCE
 quiet_cmd_bison = YACC    $(basename $@).[ch]
       cmd_bison = $(YACC) -o $(basename $@).c --defines=$(basename $@).h -t -l $<
 
-$(obj)/%.tab.c $(obj)/%.tab.h: $(src)/%.y FORCE
+$(obj)/%.tab.c $(obj)/%.tab.h: $(src)/%.y
 	$(cmd_bison)
 
 # ==========================================================================
@@ -373,7 +373,7 @@ $(call multi_depend, $(host-cmulti), , -objs)
 # host-cobjs -> .o
 quiet_cmd_host-cobjs	= HOSTCC  $@
       cmd_host-cobjs	= $(HOSTCC) $(hostc_flags) -c -o $@ $<
-$(host-cobjs): $(obj)/%.o: $(src)/%.c FORCE
+$(host-cobjs): $(obj)/%.o: $(src)/%.c
 	$(cmd_host-cobjs)
 
 # Link an executable based on list of .o files, a mixture of .c and .cc
@@ -390,7 +390,7 @@ $(call multi_depend, $(host-cxxmulti), , -objs -cxxobjs)
 # Create .o file from a single .cc (C++) file
 quiet_cmd_host-cxxobjs	= HOSTCXX $@
       cmd_host-cxxobjs	= $(HOSTCXX) $(hostcxx_flags) -c -o $@ $<
-$(host-cxxobjs): $(obj)/%.o: $(src)/%.cc FORCE
+$(host-cxxobjs): $(obj)/%.o: $(src)/%.cc
 	$(cmd_host-cxxobjs)
 
 # Set up clean rules
@@ -404,3 +404,5 @@ distclean: clean
 		conf gconf qconf mconf .depend
 
 FORCE:
+
+.PHONY: FORCE
