@@ -399,9 +399,9 @@ $(host-cxxobjs): $(obj)/%.o: $(src)/%.cc
 clean:
 	$(Q)rm -f $(clean-files)
 distclean: clean
-	$(Q)rm -f $(lxdialog) $(conf-objs) $(mconf-objs) \
-		$(qconf-cxxobjs) $(qconf-objs) $(gconf-objs) \
-		conf gconf qconf mconf .depend
+	$(Q)rm -f $(foreach o,$(lxdialog) $(conf-objs) $(mconf-objs) \
+		$(qconf-cxxobjs) $(qconf-objs) $(gconf-objs),$o .$o.d) \
+		conf gconf mconf nconf qconf .depend
 
 FORCE:
 
