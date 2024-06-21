@@ -7,6 +7,6 @@ export KBUILD_KCONFIG=$WD/Kconfig
 
 # Generate test configuration
 $WD/gen_kconfig < $WD/testlist > $KBUILD_KCONFIG
-make -C $BUILDDIR oldconfig
+make -C $BUILDDIR oldconfig || exit $?
 
 $WD/check_kconfig < $BUILDDIR/.config
