@@ -1031,6 +1031,7 @@ static enum string_value_kind expr_parse_string(const char *str,
 static int expr_version_compare(char *ver1, char *ver2, char*ptr1, char*ptr2)
 {
 	static const char DELIM[] = "._-";
+	char *end1, *end2;
 	int val1, val2;
 
 	/* Get the next (sub)version from each string */
@@ -1046,17 +1047,53 @@ static int expr_version_compare(char *ver1, char *ver2, char*ptr1, char*ptr2)
 		return  1; /* ver1 had more subversions */
 
 	/* Both strings are non-empty; perform a numeric comparison */
-	val1 = atoi(ver1);
-	val2 = atoi(ver2);
+	for (;;) {
+		val1 = strtol(ver1, &end1, 10);
+		val2 = strtol(ver2, &end2, 10);
 
-	if (val1 < val2)
-		return -1;
-	if (val1 > val2)
-		return  1;
+		if (val1 < val2)
+			return -1;
+		if (val1 > val2)
+			return  1;
 
-	/* Equal; compare the next subversion */
-	return expr_version_compare(0,0, ptr1, ptr2);
+		/* Numerically equal; check for additional characters */
+		for (;;) {
+			/* Scan forward until a digit or null character */
+			if (*end1 == '\0') { /* ver1 was entirely numeric */
+				if (*end2 == '\0') { /* both ver1&2 ended */
+					/* Equal; compare the next subversion */
+					return expr_version_compare(0,0, ptr1,
+								    ptr2);
+				}
+				return -1; /* ver2 had more subversions */
+			} else if (*end2 == '\0') { /* ver2 was numeric */
+				return 1; /* ver1 had more subversions */
+			}
+
+			/* Neither character is null */
+			if (*end1 >= '0' && *end1 <= '9' &&
+			    *end2 >= '0' && *end2 <= '9') {
+				/* Another numeric sequence separated
+ * 				 * by some common character sequence */
+				ver1 = end1;
+				ver2 = end2;
+				break;
+			}
+
+			if (*end1 < *end2) {
+				return -1;
+			} else if (*end1 > *end2) {
+				return 1;
+			}
+			/* else the two characters are identical; check next */
+			end1++;
+			end2++;
+		}
+	}
+
+	return 0; /* This should never be reached */
 }
+
 
 tristate expr_calc_value(struct expr *e)
 {
