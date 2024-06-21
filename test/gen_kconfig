@@ -90,6 +90,8 @@ while (<$testinput>) {
 	s/>=/_GE_/g;
 	s/</_LT_/g;
 	s/>/_GT_/g;
+	s/!=/_NE_/g;
+	s/=/_EQ_/g;
 
 	s/&&/_AND_/g;
 	s/\|\|/_OR_/g;
