@@ -80,7 +80,7 @@ while (<$testinput>) {
 	s/%\{(.+?)\}/parse_numeric($1)/eg;
 
 	my $expr = substr($_, 2);
-	$expr=~ s/(^| )([0-9]\S+)($| )/$1"$2"$3/g; # quote version tokens
+	$expr=~ s/(^| )(\w\S*)($| )/$1"$2"$3/g; # quote version tokens
 
 	s/^(.)/uc($1)/e; # already checked to be Y or N
 
